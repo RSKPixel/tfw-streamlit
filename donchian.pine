@@ -1,0 +1,32 @@
+//@version=5
+indicator(title="Modified Donchian Channel", shorttitle="NTDC", overlay=true, timeframe="", timeframe_gaps=true)
+
+// --- Inputs ---
+length = input.int(72, "Channel Length", minval=4)
+
+// --- Donchian Channel Calculation ---
+lower = ta.lowest(close[1], length - 1)
+upper = ta.highest(close[1], length - 1)
+
+// --- Signal Logic ---
+var sig = 0
+buy = ta.crossover(close, upper) and sig != 1
+sell = ta.crossunder(close, lower) and sig != -1
+
+if buy
+    sig := 1
+else if sell
+    sig := -1
+
+// --- Plot Lines ---
+u = plot(upper, "Upper", color=color.new(#2962FF, 0))
+l = plot(lower, "Lower", color=color.new(#2962FF, 0))
+
+fill(u, l, color=color.new(#2962FF, 90))
+
+// --- Plot Signals ---
+plotshape(buy, title="Buy Signal", style=shape.labelup, location=location.belowbar,
+     color=color.new(#00FF00, 0), size=size.tiny, text="Long", textcolor=color.black)
+
+plotshape(sell, title="Sell Signal", style=shape.labeldown, location=location.abovebar,
+     color=color.new(#FF0000, 0), size=size.tiny, text="Short", textcolor=color.white)

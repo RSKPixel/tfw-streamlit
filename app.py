@@ -3,7 +3,7 @@ import psycopg2
 import pandas as pd
 import sqlalchemy
 from urllib.parse import quote_plus
-
+import altair as alt
 
 # Time frame mapping
 tf = {
@@ -15,21 +15,6 @@ tf = {
 
 
 # --- Database Connection ---
-def get_db_connection():
-
-    try:
-        conn = psycopg2.connect(
-            host="trialnerror.in",
-            database="tradersframework",
-            user="sysadmin",
-            password="Apple@1239",
-        )
-    except Exception as e:
-        st.error(f"Error connecting to database: {e}")
-        st.stop()
-    return conn
-
-
 def get_sqlalchemy_engine():
     try:
         host = "trialnerror.in"
@@ -49,12 +34,17 @@ def get_sqlalchemy_engine():
     return engine
 
 
-def ohlcv(symbol: str, start_date: str, end_date: str, time_frame: str) -> pd.DataFrame:
+engine = get_sqlalchemy_engine()
 
-    engine = get_sqlalchemy_engine()
+
+def ohlcv(
+    symbol: str, start_date: str, end_date: str, selected_tf: str
+) -> pd.DataFrame:
+
+    timeframe = tf[selected_tf]
     query = f"""
         SELECT date AT TIME ZONE 'Asia/Kolkata' AS local_time, *
-        FROM {time_frame}
+        FROM {timeframe}
         WHERE symbol = %s AND date >= %s AND date <= %s
         ORDER BY date DESC;
     """
@@ -66,10 +56,8 @@ def ohlcv(symbol: str, start_date: str, end_date: str, time_frame: str) -> pd.Da
 
 
 # Fetch available symbols
-def fetch_symbols_daterange(timeframe) -> pd.DataFrame:
-    st.set_page_config(page_title="TFW Dashboard", layout="centered")
-    st.header("Traders Framework (TFW) Dashboard")
-    engine = get_sqlalchemy_engine()
+def fetch_symbols_daterange(selected_tf) -> pd.DataFrame:
+    timeframe = tf[selected_tf]
     query = f"SELECT symbol FROM {timeframe} GROUP BY symbol ORDER BY symbol;"
 
     symbols = pd.read_sql(query, engine)
@@ -82,6 +70,7 @@ def fetch_symbols_daterange(timeframe) -> pd.DataFrame:
     """
 
     date_range = pd.read_sql(query, engine)
+
     date_range["max_date"] = pd.to_datetime(date_range["max_date"]).dt.strftime(
         "%Y-%m-%d %H:%M"
     )
@@ -94,46 +83,88 @@ def fetch_symbols_daterange(timeframe) -> pd.DataFrame:
 
 # --- Streamlit UI ---
 def streamlit_ui():
-    # st.title("Traders Framework (TFW)")
     selected_tf = "5min"
-    datatype = ["OHLCV Only", "With Technical Data"]
-    timeframe = tf[selected_tf]
+    st.set_page_config(page_title="TFW Dashboard", layout="wide")
+    st.header("Dashboard")
 
-    symbols, date_range = fetch_symbols_daterange(timeframe)
+    datatype = ["OHLC"]
 
-    selected_symbol = st.selectbox("Select Symbol", symbols["symbol"].tolist())
-    cols = st.columns(2)
+    primary_columns = st.columns([1, 3])
 
-    with cols[0]:
-        selected_tf = st.segmented_control(
-            "Available Time Frames:", options=list(tf.keys()), default="5min"
+    with primary_columns[0]:
+        with st.container(border=True):
+            selected_tf = st.segmented_control(
+                "Time Frames:", options=list(tf.keys()), default="5min"
+            )
+
+            selected_datatype = st.segmented_control(
+                "Data:", options=datatype, default="OHLC"
+            )
+
+            symbols, date_range = fetch_symbols_daterange(selected_tf)
+            selected_symbol = st.selectbox("Symbols", symbols["symbol"].tolist())
+
+            table_data = {
+                "Min Date": [date_range["min_date"][0]],
+                "Max Date": [date_range["max_date"][0]],
+            }
+            st.table(table_data)
+
+    with primary_columns[1]:
+        with st.container(border=True):
+            st.subheader(f"{selected_symbol} - {selected_tf} Data")
+            if selected_datatype == "With Technical Data":
+                st.info("Technical Data feature is coming soon!")
+                st.stop()
+
+            if selected_datatype == "OHLC":
+                ohlcv_data = ohlcv(
+                    selected_symbol,
+                    date_range["min_date"][0],
+                    date_range["max_date"][0],
+                    selected_tf,
+                )
+
+            st.dataframe(ohlcv_data, hide_index=True)
+            st.button("Show Chart", on_click=chart_dialog, args=(ohlcv_data,))
+
+
+@st.dialog("Chart", width="large")
+def chart_dialog(data=None):
+    chart = (
+        alt.Chart(data)
+        .mark_line()
+        .encode(
+            x=alt.X("index:T", title="Date"),
+            y=alt.Y(
+                "close:Q",
+                title="Closing Price",
+                scale=alt.Scale(domain=[data["close"].min(), data["close"].max()]),
+            ),
         )
-
-    with cols[1]:
-        selected_datatype = st.segmented_control(
-            "Select Data Type:", options=datatype, default="OHLCV Only"
-        )
-    timeframe = tf[selected_tf]
-
-    table_data = {
-        "Min Date": [date_range["min_date"][0]],
-        "Max Date": [date_range["max_date"][0]],
-    }
-    st.table(table_data)
-
-    if selected_datatype == "With Technical Data":
-        st.info("Technical Data feature is coming soon!")
-        st.stop()
-
-    if selected_datatype == "OHLCV Only":
-        ohlcv_data = ohlcv(
-            selected_symbol,
-            date_range["min_date"][0],
-            date_range["max_date"][0],
-            timeframe,
-        )
-
-    st.dataframe(ohlcv_data, hide_index=True, height=300)
+        .properties(title="Closing Prices Over Time")
+        .interactive()
+    )
+    st.altair_chart(chart, use_container_width=True)
 
 
+st.markdown(
+    """
+    <style>
+        /* Hide Streamlit header and main menu */
+        header[data-testid="stHeader"] {
+            display: none;
+        }
+        div[data-testid="stToolbar"] {
+            display: none;
+        }
+
+        /* Optional: remove top padding / white gap */
+        .block-container {
+            padding-top: 0rem;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 streamlit_ui()
