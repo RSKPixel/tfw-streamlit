@@ -1,24 +1,18 @@
-import streamlit as st
-import psycopg2
-import pandas as pd
 import sqlalchemy
+import pandas as pd
+import psycopg2
+import streamlit as st
 from urllib.parse import quote_plus
+from datetime import datetime, timedelta
 import altair as alt
-
-# Time frame mapping
-tf = {
-    "5min": "idata_5min",
-    "15min": "idata_15min",
-    "60min": "idata_60min",
-    "1day": "idata_1day",
-}
+import plotly.graph_objects as go
 
 
 # --- Database Connection ---
 def get_sqlalchemy_engine():
     try:
         host = "trialnerror.in"
-        database = "tradersframework"
+        database = "tfw"
         user = "sysadmin"
         password = quote_plus("Apple@1239")
 
@@ -34,137 +28,123 @@ def get_sqlalchemy_engine():
     return engine
 
 
-engine = get_sqlalchemy_engine()
-
-
-def ohlcv(
-    symbol: str, start_date: str, end_date: str, selected_tf: str
+def eod(
+    symbol: str,
+    from_date: str,
+    to_date: str,
 ) -> pd.DataFrame:
 
-    timeframe = tf[selected_tf]
+    engine = get_sqlalchemy_engine()
     query = f"""
-        SELECT date AT TIME ZONE 'Asia/Kolkata' AS local_time, *
-        FROM {timeframe}
-        WHERE symbol = %s AND date >= %s AND date <= %s
-        ORDER BY date DESC;
+        SELECT datetime AT TIME ZONE 'Asia/Kolkata' AS local_time, *
+        FROM tfw_eod
+        WHERE symbol = %s AND datetime >= %s AND datetime <= %s
+        ORDER BY datetime DESC;
     """
-    df = pd.read_sql(query, engine, params=(symbol, start_date, end_date))
+    df = pd.read_sql(query, engine, params=(symbol, from_date, to_date))
 
-    df = df[["local_time", "open", "high", "low", "close", "volume"]]
+    df = df[["local_time", "open", "high", "low", "close", "volume", "oi"]]
     df.rename(columns={"local_time": "date"}, inplace=True)
     return df
 
 
-# Fetch available symbols
-def fetch_symbols_daterange(selected_tf) -> pd.DataFrame:
-    timeframe = tf[selected_tf]
-    query = f"SELECT symbol FROM {timeframe} GROUP BY symbol ORDER BY symbol;"
-
-    symbols = pd.read_sql(query, engine)
-
-    query = f"""
-        SELECT
-            MIN(date) AT TIME ZONE 'Asia/Kolkata' as min_date,
-            MAX(date) AT TIME ZONE 'Asia/Kolkata' as max_date
-        FROM {timeframe};
-    """
-
-    date_range = pd.read_sql(query, engine)
-
-    date_range["max_date"] = pd.to_datetime(date_range["max_date"]).dt.strftime(
-        "%Y-%m-%d %H:%M"
+def main():
+    st.set_page_config(layout="wide")
+    portfolio = ["NIFTY", "GOLD", "SILVER", "NATURALGAS", "CRUDEOIL"]
+    symbol = st.sidebar.selectbox("Select Symbol", portfolio, index=0)
+    no_of_days = st.sidebar.slider("Select number of days for EOD data", 1, 5000, 200)
+    to_date = datetime.now().date().strftime("%Y-%m-%d")
+    from_date = (
+        (datetime.now() - timedelta(days=no_of_days)).date().strftime("%Y-%m-%d")
     )
-    date_range["min_date"] = pd.to_datetime(date_range["min_date"]).dt.strftime(
-        "%Y-%m-%d %H:%M"
+    st.text(f"Fetching EOD data for {symbol} from {from_date} to {to_date}")
+    df = eod(symbol, str(from_date), str(to_date))
+    if st.sidebar.button("Show DataFrame"):
+        st.write(df)
+
+    chart_type_radio = st.sidebar.radio(
+        "Select Chart Type", ["Candlestick", "Line Chart", "Bar Chart"], index=0
     )
 
-    return symbols, date_range
-
-
-# --- Streamlit UI ---
-def streamlit_ui():
-    selected_tf = "5min"
-    st.set_page_config(page_title="TFW Dashboard", layout="wide")
-    st.header("Dashboard")
-
-    datatype = ["OHLC"]
-
-    primary_columns = st.columns([1, 3])
-
-    with primary_columns[0]:
-        with st.container(border=True):
-            selected_tf = st.segmented_control(
-                "Time Frames:", options=list(tf.keys()), default="5min"
-            )
-
-            selected_datatype = st.segmented_control(
-                "Data:", options=datatype, default="OHLC"
-            )
-
-            symbols, date_range = fetch_symbols_daterange(selected_tf)
-            selected_symbol = st.selectbox("Symbols", symbols["symbol"].tolist())
-
-            table_data = {
-                "Min Date": [date_range["min_date"][0]],
-                "Max Date": [date_range["max_date"][0]],
-            }
-            st.table(table_data)
-
-    with primary_columns[1]:
-        with st.container(border=True):
-            st.subheader(f"{selected_symbol} - {selected_tf} Data")
-            if selected_datatype == "With Technical Data":
-                st.info("Technical Data feature is coming soon!")
-                st.stop()
-
-            if selected_datatype == "OHLC":
-                ohlcv_data = ohlcv(
-                    selected_symbol,
-                    date_range["min_date"][0],
-                    date_range["max_date"][0],
-                    selected_tf,
+    if chart_type_radio == "Candlestick":
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=df["date"],
+                    open=df["open"],
+                    high=df["high"],
+                    low=df["low"],
+                    close=df["close"],
                 )
-
-            st.dataframe(ohlcv_data, hide_index=True)
-            st.button("Show Chart", on_click=chart_dialog, args=(ohlcv_data,))
-
-
-@st.dialog("Chart", width="large")
-def chart_dialog(data=None):
-    chart = (
-        alt.Chart(data)
-        .mark_line()
-        .encode(
-            x=alt.X("index:T", title="Date"),
-            y=alt.Y(
-                "close:Q",
-                title="Closing Price",
-                scale=alt.Scale(domain=[data["close"].min(), data["close"].max()]),
-            ),
+            ]
         )
-        .properties(title="Closing Prices Over Time")
-        .interactive()
-    )
-    st.altair_chart(chart, use_container_width=True)
+
+        fig.update_layout(xaxis_rangeslider_visible=False, height=600)
+        st.plotly_chart(fig, use_container_width=True, config={"height": 600})
+    elif chart_type_radio == "Line Chart":
+        df2 = df.set_index("date")
+
+        ymin = df2["high"].min()
+        ymax = df2["low"].max()
+
+        chart = (
+            alt.Chart(df2.reset_index())
+            .mark_line()
+            .encode(
+                x="date:T", y=alt.Y("close:Q", scale=alt.Scale(domain=[ymin, ymax]))
+            )
+            .properties(width="container", height=600)
+        )
+
+        st.altair_chart(chart, use_container_width=True)
+    elif chart_type_radio == "Bar Chart":
+        # df["date"] = pd.to_datetime(df["date"])
+
+        # ymax = df["high"].max()
+        # ymin = df["low"].min()
+
+        # chart = (
+        #     alt.Chart(df)
+        #     .mark_rule()
+        #     .encode(
+        #         x="date:T",
+        #         y="low:Q",
+        #         y2="high:Q",
+        #         color=alt.condition(
+        #             "datum.open < datum.close", alt.value("green"), alt.value("red")
+        #         ),
+        #     )
+        #     .properties(height=400)
+        # )
+        # # set x max and min
+        # chart = chart.encode(
+        #     y=alt.Y("low:Q", scale=alt.Scale(domain=[ymin, ymax])),
+        # )
+        # st.altair_chart(chart, use_container_width=True)
+        df["date"] = pd.to_datetime(df["date"])
+
+        fig = go.Figure(
+            data=[
+                go.Ohlc(
+                    x=df.index,
+                    open=df["open"],
+                    high=df["high"],
+                    low=df["low"],
+                    close=df["close"],
+                    increasing_line_color="red",
+                    decreasing_line_color="green",
+                )
+            ]
+        )
+
+        fig.update_layout(
+            autosize=False,
+            height=600,
+            xaxis_rangeslider_visible=False,  # no bottom scroll
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"height": 1000})
 
 
-st.markdown(
-    """
-    <style>
-        /* Hide Streamlit header and main menu */
-        header[data-testid="stHeader"] {
-            display: none;
-        }
-        div[data-testid="stToolbar"] {
-            display: none;
-        }
-
-        /* Optional: remove top padding / white gap */
-        .block-container {
-            padding-top: 0rem;
-        }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-streamlit_ui()
+if __name__ == "__main__":
+    main()
