@@ -39,7 +39,7 @@ def eod(
         SELECT datetime AT TIME ZONE 'Asia/Kolkata' AS local_time, *
         FROM tfw_eod
         WHERE symbol = %s AND datetime >= %s AND datetime <= %s
-        ORDER BY datetime DESC;
+        ORDER BY datetime ASC;
     """
     df = pd.read_sql(query, engine, params=(symbol, from_date, to_date))
 
