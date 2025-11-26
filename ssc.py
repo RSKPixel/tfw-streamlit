@@ -56,6 +56,18 @@ def main():
 
 
 def classify_bars_ssc(df: pd.DataFrame) -> pd.DataFrame:
+
+    def barType(prev_h, prev_l, h, l):
+        if (h > prev_h) and (l >= prev_l):
+            return "DB"
+        if (l < prev_l) and (h <= prev_h):
+            return "DB"
+        if (h <= prev_h) and (l >= prev_l):
+            return "ISB"
+        if (h >= prev_h) and (l <= prev_l):
+            return "OSB"
+        return "DB"  # fallback directional bar
+
     """
     Classify each bar as:
       - 'DBU' (directional up), 'DBD' (directional down), 'ISB', 'OSB'
