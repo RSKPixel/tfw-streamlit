@@ -21,6 +21,7 @@ def plot_tv_ohlc_dark_v2(
     highp = data["high"].values
     lowp = data["low"].values
     closep = data["close"].values
+    bar_types = data["bar_type"].values
 
     tick = 0.25
     wick_width = 1.3
@@ -29,6 +30,7 @@ def plot_tv_ohlc_dark_v2(
     # Colors (TradingView Dark)
     up = "#26a69a"  # teal green
     down = "#ef5350"  # soft red
+    osb = "#cfd8dc"  # light gray
     bg = "#0d1117"  # deep dark
     grid_color = "#30363d"
     border_color = "#444c56"
@@ -37,6 +39,8 @@ def plot_tv_ohlc_dark_v2(
     for i in range(len(x)):
         bull = closep[i] >= openp[i]
         col = up if bull else down
+        if bar_types[i] == "OSB":
+            col = osb
 
         # Wick
         ax.plot([x[i], x[i]], [lowp[i], highp[i]], color=col, linewidth=wick_width)

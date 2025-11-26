@@ -8,7 +8,11 @@ from barchart import plot_tv_ohlc_dark_v2
 
 def main():
     st.set_page_config(page_title="SSC Data Viewer", layout="wide")
-    df = eod("CRUDEOIL", "2023-01-01", "2023-12-31")
+    symbol = st.selectbox(
+        "Select Symbol",
+        ["CRUDEOIL", "GOLD", "SILVER", "NATURALGAS", "NIFTY", "BANKNIFTY"],
+    )
+    df = eod(symbol, "2023-01-01", "2023-12-31")
     df["date"] = pd.to_datetime(df["date"])
     df.set_index("date", inplace=True)
     df = ssc.SSC(df)
@@ -23,8 +27,6 @@ def main():
         (row["x"], row["low"])
         for _, row in df[df["swing_point"] == df["low"]].iterrows()
     ]
-
-    print(tops, bottoms)
 
     fig = plot_tv_ohlc_dark_v2(
         df,
