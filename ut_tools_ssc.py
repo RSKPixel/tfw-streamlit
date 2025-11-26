@@ -75,9 +75,6 @@ def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
                     swing_index = i
                     swing_point = current_l
                     df.at[df.index[swing_index], "swing_point"] = swing_point
-                if current_h >= swing_point:
-                    print("Low to High", i)
-                    continue
             if swing == "high":
                 if current_h >= swing_point:
                     df.at[df.index[swing_index], "swing_point"] = np.nan
@@ -86,8 +83,6 @@ def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
                     swing_point = current_h
                     df.at[df.index[swing_index], "swing_point"] = swing_point
 
-                if current_l <= swing_point:
-                    print("High to Low", i)
             continue
 
         if current_bar == "DB":
