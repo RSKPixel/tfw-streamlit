@@ -9,8 +9,6 @@ def plot_tv_ohlc_dark_v2(
     date_fmt="%Y-%m-%d",
     title="TradingView Dark-Mode OHLC",
 ) -> plt.Figure:
-    import matplotlib.pyplot as plt
-    import streamlit as st
 
     fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -21,7 +19,10 @@ def plot_tv_ohlc_dark_v2(
     highp = data["high"].values
     lowp = data["low"].values
     closep = data["close"].values
-    bar_types = data["bar_type"].values
+    bar_type = data["bar_type"].values
+    swing_points = data["swing_point"].values
+    # swing_points_index = data[data["swing_point"].notna()].index
+    # bar_type_penfold = data["bar_type_penfold"].values
 
     tick = 0.25
     wick_width = 1.3
@@ -30,17 +31,37 @@ def plot_tv_ohlc_dark_v2(
     # Colors (TradingView Dark)
     up = "#26a69a"  # teal green
     down = "#ef5350"  # soft red
-    osb = "#cfd8dc"  # light gray
-    bg = "#0d1117"  # deep dark
+    up = "#777777"  # medium gray
+    down = "#777777"  # medium gray
+    osb = "#1e80ff"  # more lighter blue
+    isb = "#ffeb3b"  # yellow
+    bg = "#000000"  # deep dark
     grid_color = "#30363d"
     border_color = "#444c56"
+
+    # need to put bar number on every bar for debugging
+
+    for i in range(len(x)):
+
+        if bar_type[i] == "OSB":
+            ax.text(
+                x[i],
+                highp[i] + (highp[i] * 1 / 100),
+                str(i),
+                color="white",
+                fontsize=8,
+                ha="center",
+                va="bottom",
+            )
 
     # --- OHLC Bars ---
     for i in range(len(x)):
         bull = closep[i] >= openp[i]
         col = up if bull else down
-        if bar_types[i] == "OSB":
+        if bar_type[i] == "OSB":
             col = osb
+        elif bar_type[i] == "ISB":
+            col = isb
 
         # Wick
         ax.plot([x[i], x[i]], [lowp[i], highp[i]], color=col, linewidth=wick_width)
@@ -55,34 +76,34 @@ def plot_tv_ohlc_dark_v2(
             [x[i], x[i] + tick], [closep[i], closep[i]], color=col, linewidth=line_width
         )
 
-    # --- Tops ---
-    if tops:
-        for xx, price in tops:
-            ax.plot(
-                xx,
-                price + (price * 1 / 100),
-                "v",
-                color="#1e90ff",
-                markersize=7,
-                markeredgecolor="white",
-                markeredgewidth=0.9,
-            )
-    # --- Bottoms ---
-    if bottoms:
-        for xx, price in bottoms:
-            ax.plot(
-                xx,
-                price - (price * 1 / 100),
-                "^",
-                color="#ffa726",
-                markersize=7,
-                markeredgecolor="white",
-                markeredgewidth=0.9,
-            )
+    # # --- Tops ---
+    # if tops:
+    #     for xx, price in tops:
+    #         ax.plot(
+    #             xx,
+    #             price,
+    #             "v",
+    #             color="#1e90ff",
+    #             markersize=7,
+    #             markeredgecolor="white",
+    #             markeredgewidth=0.9,
+    #         )
+    # # --- Bottoms ---
+    # if bottoms:
+    #     for xx, price in bottoms:
+    #         ax.plot(
+    #             xx,
+    #             price,
+    #             "^",
+    #             color="#ffa726",
+    #             markersize=7,
+    #             markeredgecolor="white",
+    #             markeredgewidth=0.9,
+    #         )
 
     # --- X-axis Date Labels ---
     idx = data.index
-    labels = [d.strftime(date_fmt) for d in idx]
+    labels = [d.strftime(date_fmt) if hasattr(d, "strftime") else str(d) for d in idx]
     step = max(len(data) // 12, 1)
 
     ax.set_xticks(x[::step])
@@ -101,5 +122,33 @@ def plot_tv_ohlc_dark_v2(
 
     ax.set_title(title, fontsize=12, color="white", weight="bold")
     ax.set_ylabel("Price", color="white")
+
+    # --- Overlay Swing Line ---
+    df_sw = data[data["swing_point"].notna()]
+
+    if not df_sw.empty:
+        sx = df_sw.index.map(
+            lambda t: x[data.index.get_loc(t)]
+        )  # map datetime to x coordinate
+        sy = df_sw["swing_point"].values
+        # Connect swing points
+        ax.plot(
+            sx,
+            sy,
+            color="#ff9800",
+            linewidth=1,
+            zorder=0,  # <-- ensures swing line stays on top
+        )
+
+        # Optional: small dots for clarity
+        ax.scatter(
+            sx,
+            sy,
+            color="#ff9800",
+            s=29,
+            edgecolor="white",
+            linewidth=0.1,
+            zorder=0,
+        )
 
     return fig

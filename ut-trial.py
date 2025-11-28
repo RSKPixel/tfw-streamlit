@@ -22,11 +22,14 @@ def main():
             "Close": "close",
         }
     )
-
+    df["swing_point"] = df["SSC"]
+    df["bar_type"] = ""
     df["date"] = pd.to_datetime(df["date"])
     df.set_index("date", inplace=True)
     df.sort_values(by=["date"], inplace=True)
-    df = df[-120:]
+    df = df[(df.index >= datetime(2022, 7, 19)) & (df.index <= datetime(2023, 7, 19))]
+    df = df.reset_index()
+    df = df[:-100]
     df["x"] = range(len(df))
     df["swing"] = np.where((df["high"] == df["SSC"]), "swing-high", "")
     df["swing"] = np.where((df["low"] == df["SSC"]), "swing-low", df["swing"])
@@ -36,16 +39,14 @@ def main():
     bottoms = [
         (row["x"], row["low"]) for _, row in df[df["swing"] == "swing-low"].iterrows()
     ]
-    from_date = df.index.min().strftime("%Y-%m-%d")
-    to_date = df.index.max().strftime("%Y-%m-%d")
-    st.text(f"Displaying data from {from_date} to {to_date}")
-    title = f"Swing Chart of {symbol.upper()} from {from_date} to {to_date}"
+    st.write(f"No of Swing tops found: {len(tops)}")
+    st.write(f"No of Swing bottoms found: {len(bottoms)}")
     fig = plot_tv_ohlc_dark_v2(
         data=df,
         tops=tops,
         bottoms=bottoms,
         date_fmt="%Y-%m-%d",
-        title=title,
+        title="Swing Chart",
     )
     st.pyplot(fig)
     st.dataframe(df[["open", "high", "low", "close", "SSC", "swing"]])
