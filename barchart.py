@@ -8,6 +8,7 @@ def plot_tv_ohlc_dark_v2(
     bottoms=None,
     date_fmt="%Y-%m-%d",
     title="TradingView Dark-Mode OHLC",
+    debugging=False,
 ) -> plt.Figure:
 
     fig, ax = plt.subplots(figsize=(14, 6))
@@ -40,28 +41,29 @@ def plot_tv_ohlc_dark_v2(
     border_color = "#444c56"
 
     # need to put bar number on every bar for debugging
+    if debugging:
+        for i in range(len(x)):
 
-    for i in range(len(x)):
-
-        if bar_type[i] == "OSB":
-            ax.text(
-                x[i],
-                highp[i] + (highp[i] * 1 / 100),
-                str(i),
-                color="white",
-                fontsize=8,
-                ha="center",
-                va="bottom",
-            )
+            if bar_type[i] == "OSB":
+                ax.text(
+                    x[i],
+                    highp[i] + (highp[i] * 1 / 100),
+                    str(i),
+                    color="white",
+                    fontsize=8,
+                    ha="center",
+                    va="bottom",
+                )
 
     # --- OHLC Bars ---
     for i in range(len(x)):
         bull = closep[i] >= openp[i]
         col = up if bull else down
-        if bar_type[i] == "OSB":
-            col = osb
-        elif bar_type[i] == "ISB":
-            col = isb
+        if debugging:
+            if bar_type[i] == "OSB":
+                col = osb
+            elif bar_type[i] == "ISB":
+                col = isb
 
         # Wick
         ax.plot([x[i], x[i]], [lowp[i], highp[i]], color=col, linewidth=wick_width)

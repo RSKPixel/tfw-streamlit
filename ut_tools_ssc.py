@@ -1,84 +1,6 @@
 import pandas as pd
 import numpy as np
 
-import pandas as pd
-
-
-def BarDefinition_Penfold(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Simplified and accurate Python version of Brent Penfold's VBA bar classification.
-    Requires df columns: ['High', 'Low'].
-    Adds a 'bar_type' column containing: DB, OSB, ISB.
-    """
-
-    df = df.copy()
-    n = len(df)
-    df["bar_type"] = None
-
-    i = 1  # equivalent to VBA row 2
-    df.iloc[0, df.columns.get_loc("bar_type")] = "DB"  # first bar is always DB
-
-    while i < n:
-
-        prev_h = df.high.iloc[i - 1]
-        prev_l = df.low.iloc[i - 1]
-
-        h = df.high.iloc[i]
-        l = df.low.iloc[i]
-        bar_type = df.columns.get_loc("bar_type")
-
-        # -------------------------------------
-        # 1. Directional UP (DB)
-        # -------------------------------------
-        if h > prev_h and l >= prev_l:
-            df.iloc[i, bar_type] = "DB"
-
-        # -------------------------------------
-        # 2. Directional DOWN (DB)
-        # -------------------------------------
-        elif h <= prev_h and l < prev_l:
-            df.iloc[i, bar_type] = "DB"
-
-        # -------------------------------------
-        # 3. Outside Bar (OSB)
-        # -------------------------------------
-        elif h > prev_h and l < prev_l:
-            df.iloc[i, bar_type] = "OSB"
-
-        # -------------------------------------
-        # 4. Inside Bar (ISB) + Multi-ISB Loop
-        # -------------------------------------
-        elif h <= prev_h and l >= prev_l:
-
-            df.iloc[i, bar_type] = "ISB"
-
-            # freeze previous bar range
-            range_high = prev_h
-            range_low = prev_l
-
-            j = i
-            # extend ISB chain
-            while j < n:
-                hh = df.high.iloc[j]
-                ll = df.low.iloc[j]
-
-                # breakout?
-                if hh > range_high or ll < range_low:
-                    break
-
-                df.iloc[j, bar_type] = "ISB"
-                j += 1
-
-            # move i to last inside bar (same logic as VBA's i = j - 1)
-            i = j - 1
-
-        else:
-            # Should never occur if data is valid OHLC
-            df.iloc[i, bar_type] = "DB"
-
-        i += 1
-    return df
-
 
 def BarType(previous_bar, current_bar) -> str:
     prev_h, prev_l = previous_bar["high"], previous_bar["low"]
@@ -135,6 +57,7 @@ def BarDefination(df: pd.DataFrame) -> pd.DataFrame:
 
 def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = BarDefination(df)
     df["swing_point"] = np.nan
     df["swing"] = ""
     previous_db_index = 0
@@ -172,22 +95,74 @@ def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if current_bar == "OSB":
-            # if swing_index != previous_db_index:
-            #     # swing_index = previous_db_index
 
             if swing == "low":
-                if current_l <= swing_point:
+                if swing_index != previous_db_index:
+                    # if previous_db_index != swing_index then
+                    # current bar is the swing high
+                    # and we need to check for new a swing low which in between previous_db_index and swing_index
 
+                    if current_l <= swing_point and current_h >= previous_h:
+
+                        print(swing, i)
+                        resolving_ll = df.iloc[swing_index : previous_db_index + 1][
+                            "low"
+                        ].min()
+                        swing_point = resolving_ll
+                        swing = "low"
+                        swing_index = df.index.get_loc(
+                            df[df["low"] == resolving_ll].index[0]
+                        )
+                        df.at[df.index[swing_index], "swing"] = swing
+                        df.at[df.index[swing_index], "swing_point"] = swing_point
+
+                        swing_point = current_h
+                        swing = "high"
+                        swing_index = i
+                        df.at[df.index[swing_index], "swing"] = swing
+                        df.at[df.index[swing_index], "swing_point"] = swing_point
+                        previous_db_index = swing_index
+                        continue
+
+                if current_l <= swing_point:
                     swing_point = current_l
                     df.at[df.index[swing_index], "swing_point"] = np.nan
                     df.at[df.index[swing_index], "swing"] = swing
                     df.at[df.index[swing_index], "swing_point"] = swing_point
-                    swing_index = i
                 else:
                     previous_db_index = i
                     continue
 
             if swing == "high":
+
+                if swing_index != previous_db_index:
+                    #     # if previous_db_index != swing_index then
+                    #     # current bar is the swing low
+                    #     # and we need to check for new a swing high which in between previous_db_index and swing_index
+
+                    if current_h >= swing_point and current_l <= previous_l:
+                        print(swing, i)
+
+                        resolving_ll = df.iloc[swing_index : previous_db_index + 1][
+                            "low"
+                        ].min()
+                        swing_point = resolving_ll
+                        swing = "high"
+                        swing_index = df.index.get_loc(
+                            df[df["low"] == resolving_ll].index[0]
+                        )
+                        print(swing_index)
+                        df.at[df.index[swing_index], "swing"] = swing
+                        df.at[df.index[swing_index], "swing_point"] = swing_point
+
+                        swing_point = current_l
+                        swing = "low"
+                        swing_index = i
+                        df.at[df.index[swing_index], "swing"] = swing
+                        df.at[df.index[swing_index], "swing_point"] = swing_point
+                        previous_db_index = swing_index
+                        continue
+
                 if current_h >= swing_point:
 
                     swing_point = current_h
@@ -195,7 +170,6 @@ def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
                     df.at[df.index[swing_index], "swing_point"] = np.nan
                     df.at[df.index[swing_index], "swing"] = swing
                     df.at[df.index[swing_index], "swing_point"] = swing_point
-                    swing_index = i
                 else:
                     previous_db_index = i
                     continue
@@ -213,8 +187,6 @@ def SwingPoints2(df: pd.DataFrame) -> pd.DataFrame:
                 df.at[df.index[swing_index], "swing"] = swing
                 df.at[df.index[swing_index], "swing_point"] = swing_point
                 previous_db_index = i
-                if i == 28:
-                    print(swing, swing_index)
             if current_l <= previous_l:
                 if swing == "high":
                     previous_db_index = i

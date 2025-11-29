@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import ut_tools_ssc as ssc
+from ut_tools_ssc import SwingPoints2
 import streamlit as st
 from app import eod
 from barchart import plot_tv_ohlc_dark_v2
@@ -18,9 +18,10 @@ def main():
     df = eod(symbol, "2022-07-19", "2023-07-19")
     df["date"] = pd.to_datetime(df["date"])
     df.set_index("date", inplace=True)
-    df = ssc.SSC(df)
-    df = df[:-100]
+    df = SwingPoints2(df)
     df["x"] = range(len(df))
+    # df = df[100:150]
+    df = df[:-100]
     tops = [
         (row["x"], row["high"])
         for _, row in df[df["swing_point"] == df["high"]].iterrows()
@@ -37,6 +38,7 @@ def main():
         title="SSC Chart",
         tops=tops,
         bottoms=bottoms,
+        debugging=True,
     )
     st.pyplot(fig)
     st.title("SSC Data Viewer")
